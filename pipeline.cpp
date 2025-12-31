@@ -19,5 +19,6 @@ void Pipeline::processImage(std::vector<FunctionState> states){
         func(buffer2, buffer1, states[i].params);
     }
 
-    viewer->display(buffer1);
+    final_image = buffer1.clone();
+    viewer->display(final_image);
 }

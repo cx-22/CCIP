@@ -43,9 +43,13 @@ void divide(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 void mul(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void boxBlur(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void gauBlur(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void sobelGray(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 void sobelRGB(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+
+void dogExtended(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void dogSuper(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void build_funcs();
 

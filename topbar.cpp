@@ -47,12 +47,13 @@ void TopBar::loadImage(QString file_name){
 }
 
 void TopBar::saveImage(){
-    cv::Mat img;
-
     QString path = QFileDialog::getSaveFileName(nullptr,
                                                  "Save Image", "assets/saved",
                                                  "Image Files (*.png *.jpg *.bmp *.jpeg *.PNG);;All Files (*)");
-    cv::imwrite(path.toStdString(), img);
+    if (!path.isEmpty() && !pipeline->final_image.empty()){
+        cv::imwrite(path.toStdString(), pipeline->final_image);
+    }
+    file_combo->setCurrentIndex(0);
 }
 
 TopBar::~TopBar(){}
