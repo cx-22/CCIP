@@ -36,6 +36,8 @@ extern std::vector<FunctionData> g_function_data;
 
 void grayscale(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 void quantize(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void sharpen(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void saturate(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void add(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 void sub(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
@@ -50,6 +52,11 @@ void sobelRGB(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void dogExtended(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 void dogSuper(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+
+void paperTex(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void bayerDither2(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void bayerDither4(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
+void bayerDither8(cv::Mat& in, cv::Mat& out, std::vector<float>& params);
 
 void build_funcs();
 

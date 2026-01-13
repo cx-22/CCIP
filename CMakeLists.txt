@@ -14,6 +14,8 @@ find_package(OpenCV REQUIRED)
 
 include_directories(${OpenCV_INCLUDE_DIRS})
 
+file(COPY assets DESTINATION ${CMAKE_BINARY_DIR})
+
 set(PROJECT_SOURCES
     main.cpp
     mainwindow.cpp
@@ -34,6 +36,11 @@ qt_add_executable(leadiel-ip
     my_line_edit.h
     functions.h
     functions.cpp
+)
+
+target_include_directories(leadiel-ip
+    PRIVATE
+        "C:/Sources/lime/sources"
 )
 
 if(MSVC)

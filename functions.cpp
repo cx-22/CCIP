@@ -5,6 +5,7 @@
 #include <opencv2/highgui.hpp>
 #include "opencv2/imgcodecs.hpp"
 #include <opencv2/opencv.hpp>
+//#include "lime.hpp"
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -15,9 +16,65 @@ std::unordered_map<std::string, FunctionPtr> g_func_map;
 std::vector<FunctionData> g_function_data;
 
 
+static const int bayer2[2 * 2] = {
+    0, 2,
+    3, 1
+};
+
+static const int bayer4[4 * 4] = {
+    0, 8, 2, 10,
+    12, 4, 14, 6,
+    3, 11, 1, 9,
+    15, 7, 13, 5
+};
+
+static const int bayer8[8 * 8] = {
+    0, 32, 8, 40, 2, 34, 10, 42,
+    48, 16, 56, 24, 50, 18, 58, 26,
+    12, 44,  4, 36, 14, 46,  6, 38,
+    60, 28, 52, 20, 62, 30, 54, 22,
+    3, 35, 11, 43,  1, 33,  9, 41,
+    51, 19, 59, 27, 49, 17, 57, 25,
+    15, 47,  7, 39, 13, 45,  5, 37,
+    63, 31, 55, 23, 61, 29, 53, 21
+};
+
+float GetBayer2(int x, int y) {
+    return float(bayer2[(x % 2) + (y % 2) * 2]) * (1.0f / 4.0f) - 0.5f;
+}
+
+float GetBayer4(int x, int y) {
+    return float(bayer4[(x % 4) + (y % 4) * 4]) * (1.0f / 16.0f) - 0.5f;
+}
+
+float GetBayer8(int x, int y) {
+    return float(bayer8[(x % 8) + (y % 8) * 8]) * (1.0f / 64.0f) - 0.5f;
+}
+
+
 void grayscale(cv::Mat& in, cv::Mat& out, std::vector<float>&)
 {
-    cv::cvtColor(in, out, cv::COLOR_BGR2GRAY);
+
+    int rows = in.rows;
+    int cols = in.cols;
+    uchar* ptr_in;
+    uchar* ptr_out;
+    uchar val;
+    for (int x = 0; x < rows; x++)
+    {
+        ptr_in = in.ptr<uchar>(x);
+        ptr_out = out.ptr<uchar>(x);
+
+        for (int y = 0; y < cols; y++){
+
+            int idx = y * 3;
+
+            val = static_cast<uchar>((0.114f * ptr_in[idx]) + (0.587f * ptr_in[idx + 1]) + (0.299f * ptr_in[idx + 2]));
+            ptr_out[idx] = val;
+            ptr_out[idx + 1] = val;
+            ptr_out[idx + 2] = val;
+        }
+    }
 }
 
 void quantize(cv::Mat& in, cv::Mat& out, std::vector<float>& params)
@@ -218,15 +275,49 @@ void dogExtended(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
 
 void dogSuper(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
 
-    float sigma_e = static_cast<float>(params[0]);
+
+    float sigma_e = params[0];
     double k = static_cast<double>(params[1]);
     float thres = static_cast<float>(params[2]);
-    float tau = static_cast<float>(params[3]);
-    float phi = static_cast<float>(params[4]);
-    float sigma_c = static_cast<float>(params[5]);
-    float sigma_m = static_cast<float>(params[6]);
-    float sigma_a = static_cast<float>(params[7]);
+    int vec_size = static_cast<int>(params[3]);
+    float tau = params[4];
+    float phi = params[5];
+    //float a2g = params[6];
+    //int lic_step = params[7];
+
+    /*
+    cv::Mat mid, empty;
+    lime::DoGParams dog_params = lime::DoGParams(k, sigma_e, tau, phi, lime::NPR_EDGE_FDOG);
+
+    cv::Mat gray, gray_f, out_p;
+    cv::cvtColor(in, gray, cv::COLOR_BGR2GRAY);
+    gray.convertTo(gray_f, CV_32F);
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    lime::edgeFDoG(gray_f, out_p, empty, dog_params, vec_size, a2g, thres, lic_step);
+
+    auto stop = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::seconds>(stop - start);
+    std::cerr << "Function execution time: " << duration.count() << " seconds" << std::endl;
+
+
+    cv::normalize(out_p, out_p, 0.0f, 1.0f, cv::NORM_MINMAX);
+
+    std::cerr << "Center value: " << out_p.at<float>(out_p.rows/2, out_p.cols/2) << std::endl;
+
+
+    cv::Mat temp1, temp2;
+    out_p.convertTo(temp1, CV_8U, 255.0);
+    */
+
+
     //*
+    float sigma_c = params[6];
+    float sigma_m = params[7];
+    float sigma_a = params[8];
+
+
     cv::Mat gray;
     cv::cvtColor(in, gray, cv::COLOR_BGR2GRAY);
     cv::Mat kernel_x = (cv::Mat_<float>(3, 3) << -1, 0, 1,
@@ -456,21 +547,226 @@ void dogSuper(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
 
     cv::max(wa, 1e-6f, wa);
     aa /= wa;
+    //*/
 
     cv::normalize(aa, aa, 0.0f, 1.0f, cv::NORM_MINMAX);
     cv::Mat mask;
     aa.convertTo(mask, CV_8UC1, 255.0);
     cv::cvtColor(mask, mask, cv::COLOR_GRAY2BGR);
 
-    float alpha = static_cast<float>(params[8]);
-    float beta  = 1.0f - alpha;
 
-    cv::addWeighted(in, alpha, mask, beta, 0.0, out);
+    float alpha = static_cast<float>(params[9]);
+
+    if (alpha > 0.0f){
+        float sigma_b = static_cast<float>(params[10]);
+        float beta  = 1.0f - alpha;
+
+        cv::Mat color;
+
+        if (sigma_b != -1){
+            cv::GaussianBlur(in, color, cv::Size(0, 0), sigma_b);
+        } else {
+            color = in.clone();
+        }
+
+        cv::addWeighted(color, alpha, mask, beta, 0.0, out);
+    } else {
+        out = mask.clone();
+    }
+
+
 }
 
 
+void paperTex(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    float beta = static_cast<float>(params[0]);
+    float alpha  = 1.0f - beta;
+
+    cv::Mat paper_source = cv::imread("assets/textures/paper.png");
+
+    cv::Mat ratioed;
+    cv::Size size(paper_source.cols, paper_source.rows);
+
+    if (in.cols > paper_source.cols){
+        size.width = in.cols;
+    }
+    if (in.rows > paper_source.rows){
+        size.height = in.rows;
+    }
+
+    cv::resize(paper_source, ratioed, size, 0, 0, cv::INTER_LINEAR);
+    cv::Rect roi = cv::Rect(0, 0, in.cols, in.rows);
+    cv::Mat paper_cropped = ratioed(roi);
+
+    cv::addWeighted(in, alpha, paper_cropped, beta, 0.0, out);
+}
+
+void sharpen(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    float val = static_cast<float>(params[0]);
+
+    cv::Mat kernel_x = (cv::Mat_<float>(3, 3) << 0, 0, 0,
+                                                0, 1, 0,
+                                                0, 0, 0);
+
+    cv::Mat kernel_y = (cv::Mat_<float>(3, 3) << 0, 1, 0,
+                                                1, 1, 1,
+                                                0, 1, 0);
+
+    cv::Mat kernel_z = kernel_x + ((kernel_x - (kernel_y / val)) * val);
+
+    cv::filter2D(in, out, -1, kernel_z, cv::Point(-1, -1), 0, cv::BORDER_DEFAULT);
+}
+
+void saturate(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    cv::Mat hsv_image;
+    cv::cvtColor(in, hsv_image, cv::COLOR_BGR2HSV);
+
+    float saturation_scale = static_cast<float>(params[0]);
+
+    for (int i = 0; i < hsv_image.rows; ++i) {
+        for (int j = 0; j < hsv_image.cols; ++j) {
+            float sat = hsv_image.at<cv::Vec3b>(i, j)[1];
+            sat *= saturation_scale;
+            hsv_image.at<cv::Vec3b>(i, j)[1] = cv::saturate_cast<uchar>(sat);
+        }
+    }
+
+    cv::cvtColor(hsv_image, out, cv::COLOR_HSV2BGR);
+}
+
+float clamp01(float v) {
+    return std::min(1.0f, std::max(0.0f, v));
+}
+
+void bayerDither2(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    float strength = params[0];
+
+    cv::Mat f32, norm, out_prime;
+    cv::cvtColor(in, in, cv::COLOR_BGR2GRAY);
+    in.convertTo(f32, CV_32F, 255.0);
+    cv::normalize(f32, norm, 0.0f, 1.0f, cv::NORM_MINMAX);
+
+    out_prime = norm.clone();
+
+    for (int y = 0; y < in.rows; ++y) {
+        const float* src = norm.ptr<float>(y);
+        float* dst = out_prime.ptr<float>(y);
+
+        for (int x = 0; x < in.cols; ++x) {
+            float b = GetBayer2(x, y);
+            float v = src[x] + strength * b;
+            dst[x] = clamp01(v);
+        }
+    }
+
+    out_prime.convertTo(out, CV_8UC3, 255.0);
+}
+
+
+void bayerDither4(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    float strength = params[0];
+
+    cv::Mat f32, norm, out_prime;
+    cv::cvtColor(in, in, cv::COLOR_BGR2GRAY);
+    in.convertTo(f32, CV_32F, 255.0);
+    cv::normalize(f32, norm, 0.0f, 1.0f, cv::NORM_MINMAX);
+
+    out_prime = norm.clone();
+
+    for (int y = 0; y < in.rows; ++y) {
+        const float* src = norm.ptr<float>(y);
+        float* dst = out_prime.ptr<float>(y);
+
+        for (int x = 0; x < in.cols; ++x) {
+            float b = GetBayer4(x, y);
+            float v = src[x] + strength * b;
+            dst[x] = clamp01(v);
+        }
+    }
+
+    out_prime.convertTo(out, CV_8UC3, 255.0);
+}
+
+void bayerDither8(cv::Mat& in, cv::Mat& out, std::vector<float>& params){
+    float strength = params[0];
+
+    cv::Mat f32, norm, out_prime;
+    cv::cvtColor(in, in, cv::COLOR_BGR2GRAY);
+    in.convertTo(f32, CV_32F, 255.0);
+    cv::normalize(f32, norm, 0.0f, 1.0f, cv::NORM_MINMAX);
+
+    out_prime = norm.clone();
+
+    for (int y = 0; y < in.rows; ++y) {
+        const float* src = norm.ptr<float>(y);
+        float* dst = out_prime.ptr<float>(y);
+
+        for (int x = 0; x < in.cols; ++x) {
+            float b = GetBayer8(x, y);
+            float v = src[x] + strength * b;
+            dst[x] = clamp01(v);
+        }
+    }
+
+    out_prime.convertTo(out, CV_8UC3, 255.0);
+}
+
 void build_funcs()
 {
+    g_func_map["bd2"] = &bayerDither2;
+    g_function_data.push_back({
+        "bd2",
+        "Bayer Dither 2",
+        {
+            { "Strength", 1.5, .01, 10, 2, 0.5 }
+        }
+    });
+
+    g_func_map["bd8"] = &bayerDither8;
+    g_function_data.push_back({
+        "bd8",
+        "Bayer Dither 8",
+        {
+            { "Strength", 1.5, .01, 10, 2, 0.5 }
+        }
+    });
+
+    g_func_map["bd4"] = &bayerDither4;
+    g_function_data.push_back({
+        "bd4",
+        "Bayer Dither 4",
+        {
+            { "Strength", 1.5, .01, 10, 2, 0.5 }
+        }
+    });
+
+    g_func_map["saturate"] = &saturate;
+    g_function_data.push_back({
+        "saturate",
+        "Saturate",
+        {
+            { "Scale", 1.5, 1, 10, 2, 0.5 }
+        }
+    });
+
+    g_func_map["sharpen"] = &sharpen;
+    g_function_data.push_back({
+        "sharpen",
+        "Sharpen",
+        {
+            { "Factor", 5, 5, 30, 2, 1 }
+        }
+    });
+
+    g_func_map["paper_tex"] = &paperTex;
+    g_function_data.push_back({
+        "paper_tex",
+        "Paper Texture",
+        {
+            { "Blend Color", 0.5, 0, 1, 2, 0.1 }
+        }
+    });
+
     g_func_map["dog_e"] = &dogExtended;
     g_function_data.push_back({
         "dog_e",
@@ -480,7 +776,7 @@ void build_funcs()
            { "K", 1.5, 1, 10, 2, 0.1 },
            { "Threshold", 0.6, 0, 1, 2, 0.05 },
            { "Sharpen", 1, 0, 100, 2, 0.05 },
-           { "Tone Smoother", 3, -1, 100, 3, 1 },
+           { "Tone Smoother", 3, -1, 100, 3, 1 }
         }
     });
 
@@ -489,15 +785,21 @@ void build_funcs()
         "dog_s",
         "Super DoG",
         {
-            { "Edge Blur", 1.4, 0, 10, 2, 0.1 },
+            { "Edge Blur", 0.4, 0, 30, 2, 0.1 },
             { "K", 1.5, 1, 10, 2, 0.1 },
             { "Threshold", 0.6, 0, 1, 2, 0.05 },
+            { "Vec Size", 3, 3, 100, 1, 2 },
             { "Sharpen", 1, 0, 100, 2, 0.05 },
-            { "Tone Smoother", 3, -1, 100, 3, 1 },
-            { "Tensor Blur", 1.4, 0, 10, 2, 0.1 },
-            { "LIC Blur", 1.4, 0, 10, 2, 0.1 },
-            { "AA Blur", 1.4, 0, 10, 2, 0.1 },
-            { "Blend Color", 0.5, 0, 1, 2, 0.1 }
+            { "Tone Smoother", 1, -1, 100, 3, 1 },
+            //{ "A 2 G", 1, 0, 100, 2, 0.05 },
+            //{ "LIC Step", 3, 1, 100, 3, 1 },
+            //*
+            { "Tensor Blur", 1, 0, 30, 2, 0.1 },
+            { "LIC Blur", 3, 0, 30, 2, 0.1 }, //sigm
+            { "AA Blur", 1, 0, 30, 2, 0.1 }, //sig a
+            //*/
+            { "Blend Color", 0.0, 0, 1, 2, 0.1 },
+            { "Blend Blur", 5, -1, 30, 2, 0.1 }
         }
     });
 

@@ -26,6 +26,10 @@ MainWindow::MainWindow(QWidget *parent)
     connect(sidebar->run_button, &QPushButton::clicked, [this]{
         pipeline->processImage(sidebar->function_states);
     });
+
+    topbar->loadImage("assets/sample-images/taylor.jpg");
+    topbar->loadImage("assets/sample-images/taylor.jpg");
+
 }
 
 MainWindow::~MainWindow() {}
